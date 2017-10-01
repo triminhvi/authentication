@@ -28,6 +28,10 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(flash());
+app.use(function(req, res, next) {
+    res.locals.user = req.user;
+    next();
+  });
 
 //Database
 db.on('error', function(err){
@@ -44,126 +48,18 @@ db.on('open', function(err){
     console.log('Connected to DB');
 });
 
-//Config for Passport
-var LocalStrategy = require('passport-local').Strategy;
-passport.serializeUser(function(user, done){
-    done(null, user.id);
-});
-
-passport.deserializeUser(function(id, done){
-    User.findById(id, function(err, user){
-        done(err, user);
-    });
-});
-
-//Sign up strategy
-passport.use('local-signup', new LocalStrategy({
-    usernameField: 'email',
-    passwordField: 'password',
-    passReqToCallback: true
-},
-function(req, email, password, done){
-    //Sync call
-    process.nextTick(function(){
-        User.findOne({'username': email}, function(err, user){
-            if(err){
-                return done(err);
-            }
-            if(user){ // this email has been signed up
-                return done(null, false, req.flash('signupMessage', 'That email already taken'));
-            } else {
-                var newUser = new User();
-                newUser.username = email;
-                newUser.password = password;
-
-                newUser.save(function(err){
-                    if(err){
-                        throw err;
-                    }
-                    return done(null, newUser);
-                });
-            }
-        });
-    });
-}));
-
-//Login strategy
-passport.use('local-login', new LocalStrategy({
-    usernameField: 'email',
-    passwordField: 'password',
-    passReqToCallback: true
-}, 
-function(req, email, password, done){
-    process.nextTick(function(){
-        User.findOne({'username': email }, function(err, user){
-            if(err){
-                return done(err);
-            }
-            if(!user){
-                return done(null, false, req.flash('loginMessage', 'No User Found'));
-            }
-            if(user.password != password){
-                return done(null, false, req.flash('loginMessage', 'Invalid Password'));
-            }
-            return done(null, user);
-        })
-    });
-}));
-
 //APP START
+require('./config/passport.js')(passport);
+var auth = require('./routes/auth.js');
+app.use('/auth', auth);
+
 app.get('/', function(req, res){
-    //Cookies that has not been signed
-    //console.log('Unsigned Cookies: ', req.cookies);
-    //console.log(req.session)
     res.render('mainpage');
-})
-
-//User
-app.get('/:username/:password', function(req,res){
-    var newUser = new User();
-    newUser.username = req.params.username;
-    newUser.password = req.params.password;
-    console.log(newUser.username + " " + newUser.password);
-    newUser.save(function(err){
-        if(err){
-            throw err;
-            return;
-        }
-        res.send('Success');
-    })
 });
-
-//Signup
-app.get('/signup', function (req,res){
-    res.render('signup', {message: req.flash('signupMessage')});
-});
-
-app.post('/signup', passport.authenticate('local-signup', {
-    successRedirect: '/',
-    failureRedirect: '/signup',
-    failureFlash: true
-}));
-
-//Login
-app.get('/login', function(req,res){
-    res.render('login', {message: req.flash('loginMessage')});
-});
-
-app.post('/login', passport.authenticate('local-login', {
-    successRedirect: '/profile',
-    failureRedirect: '/login',
-    failureFlash: true
-}));
-
-//Logout
-app.get('/logout', function(req, res){
-    req.logout();
-    res.redirect('/');
-})
 
 //Profile Page
 app.get('/profile', isLoggedIn, function(req,res){
-    res.render('profile', {user: req.user});//req.user is the one logins && is authenticated.
+    res.render('profile', {title: 'profile'});
 });
 app.listen(process.env.PORT || 3000, function(req, res){
     console.log("listening on port 3000");
